@@ -32,4 +32,5 @@ export const storage = getStorage(app);
 export const analytics = typeof window !== "undefined" ? getAnalytics(app) : null;
 
 // Default export (optional, for flexibility)
-export default app;
+export default app; 
+
