@@ -71,6 +71,39 @@ export function UsersManagement() {
   const [activeTab, setActiveTab] = useState<"pending" | "approved">("pending")
   const { toast } = useToast()
 
+      // Admin check so UI does not load for non-admins
+    useEffect(() => {
+      async function checkAdmin() {
+        if (!auth.currentUser) return;
+
+        try {
+          const userRef = doc(db, "users", auth.currentUser.uid);
+          const snap = await getDoc(userRef);
+
+          const data = snap.data();
+          if (!data || !data.isAdmin) {
+            toast({
+              variant: "destructive",
+              title: "Access Denied",
+              description: "You do not have permission to view the Admin Panel.",
+            });
+
+            window.location.href = "/"; // or "/login"
+          }
+        } catch (err) {
+          console.error("Admin check error:", err);
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Failed to verify admin access.",
+          });
+        }
+      }
+
+      checkAdmin();
+    }, []);
+
+
   useEffect(() => {
     const unsub = onSnapshot(
       collection(db, "users"),
@@ -90,62 +123,52 @@ export function UsersManagement() {
 
   const [actionLoading, setActionLoading] = useState(false);
 
-        async function handleApprove(userId: string) {
-      if (actionLoading) return;
-      setActionLoading(true);
+    async function handleApprove(userId: string) {
+        if (actionLoading) return;
+        setActionLoading(true);
 
-      try {
-        if (!userId) throw new Error("Missing user ID");
+        try {
+          const currentUserRef = doc(db, "users", auth.currentUser!.uid);
+          const currentUserSnap = await getDoc(currentUserRef);
+          const currentUserData = currentUserSnap.data();
 
-        // --- Check admin from Firestore ---
-        const currentUserRef = doc(db, "users", auth.currentUser!.uid);
-        const currentUserSnap = await getDoc(currentUserRef);
-        const currentUserData = currentUserSnap.data();
+          if (!currentUserData?.isAdmin) {
+            alert("You don’t have permission to approve users.");
+            setActionLoading(false);
+            return;
+          }
 
-        if (!currentUserData?.isAdmin) {
-          alert("You don’t have permission to approve users.");
+          // Update status inside the same users collection
+          const userRef = doc(db, "users", userId);
+          await updateDoc(userRef, {
+            status: "approved",
+            approvedAt: new Date().toISOString(),
+          });
+
+          alert("✅ User approved successfully!");
+
+          // Remove from UI without reload
+          setUsers((prev) => prev.filter((u) => u.id !== userId));
+
+          setSelectedUser(null);
+          setIsModalOpen(false);
+
+        } catch (err) {
+          console.error("Error approving user:", err);
+          alert("❌ Failed to approve user.");
+        } finally {
           setActionLoading(false);
-          return;
         }
-
-        // Move user from pending_users → approved_users
-        const pendingRef = doc(db, "pending_users", userId);
-        const approvedRef = doc(db, "approved_users", userId);
-        const pendingSnap = await getDoc(pendingRef);
-
-        if (!pendingSnap.exists()) {
-          alert("User not found in pending list.");
-          setActionLoading(false);
-          return;
-        }
-
-        const userData = pendingSnap.data();
-        await setDoc(approvedRef, {
-          ...userData,
-          status: "approved",
-          approvedAt: new Date().toISOString(),
-        });
-
-        await deleteDoc(pendingRef);
-
-        alert("✅ User approved successfully!");
-        setSelectedUser(null);
-        setIsModalOpen(false);
-      } catch (err: any) {
-        console.error("Error approving user:", err);
-        alert("❌ Failed to approve user. Check console for details.");
-      } finally {
-        setActionLoading(false);
       }
-    }
+
 
     async function handleReject(userId: string) {
       if (actionLoading) return;
       if (!confirm("Are you sure you want to reject this user?")) return;
+
       setActionLoading(true);
 
       try {
-        // --- Check admin from Firestore ---
         const currentUserRef = doc(db, "users", auth.currentUser!.uid);
         const currentUserSnap = await getDoc(currentUserRef);
         const currentUserData = currentUserSnap.data();
@@ -156,20 +179,26 @@ export function UsersManagement() {
           return;
         }
 
-        // Delete from pending_users
-        const pendingRef = doc(db, "pending_users", userId);
-        await deleteDoc(pendingRef);
+        // Delete user from users collection completely
+        const userRef = doc(db, "users", userId);
+        await deleteDoc(userRef);
 
-        alert("❌ User rejected and removed from pending list.");
+        // alert("❌ User rejected and removed.");
+
+        // Remove instantly from UI
+        setUsers((prev) => prev.filter((u) => u.id !== userId));
+
         setSelectedUser(null);
         setIsModalOpen(false);
-      } catch (err: any) {
+
+      } catch (err) {
         console.error("Error rejecting user:", err);
-        alert("Failed to reject user. Check console for details.");
+        alert("Failed to reject user.");
       } finally {
         setActionLoading(false);
       }
     }
+
 
 
   const filteredUsers = users.filter((user) => {
