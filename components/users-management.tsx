@@ -1,12 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { getAuth, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword, signOut, getIdTokenResult } from "firebase/auth"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Search, Download, Eye, Mail, Phone, MapPin, AlertCircle, ExternalLink } from "lucide-react"
-import { getAllFirestoreUsers } from "@/lib/firebase-service"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Search, Download, Eye, Mail, Phone, MapPin, AlertCircle, ExternalLink, Edit3, Trash2, Plus } from "lucide-react"
+import { getAllFirestoreUsers, createFirestoreUser, updateFirestoreUser, deleteFirestoreUser } from "@/lib/firebase-service"
 
 interface UserData {
   id: string
@@ -27,31 +29,61 @@ export function UsersManagement() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null)
+  const [formMode, setFormMode] = useState<"create" | "edit" | null>(null)
+  const [formData, setFormData] = useState<Omit<UserData, "id" | "uid" | "createdAt" | "emailVerified">>({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phoneNumber: "",
+    address: "",
+    emergencyName: "",
+    emergencyNumber: "",
+  })
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [authUser, setAuthUser] = useState<any>(null)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [authEmail, setAuthEmail] = useState("")
+  const [authPassword, setAuthPassword] = useState("")
+  const [isAdminClaim, setIsAdminClaim] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    const fetchData = async () => {
+  const fetchUsers = async () => {
+    setLoading(true)
+    setError(null)
+    try {
       console.log("[v0] Fetching all Firestore users")
-      try {
-        const fetchedUsers = await getAllFirestoreUsers()
-        console.log("[v0] Received users from Firestore:", fetchedUsers.length)
+      const fetchedUsers = await getAllFirestoreUsers()
+      console.log("[v0] Received users from Firestore:", fetchedUsers.length)
 
-        if (fetchedUsers.length === 0) {
-          setError(
-            "No users found. Please check: 1) Firestore 'user' collection has documents, 2) Security rules allow reading (update in Firebase Console), or 3) Users exist in Realtime Database under 'users' path",
-          )
-        }
+      if (fetchedUsers.length === 0) {
+        setError(
+          "No users found. Please check: 1) Firestore 'user' collection has documents, 2) Security rules allow reading (update in Firebase Console), or 3) Users exist in Realtime Database under 'users' path",
+        )
+      }
 
-        setUsers(fetchedUsers)
-      } catch (error) {
-        console.error("[v0] Error fetching data:", error)
-        setError("Failed to fetch users. Check browser console for details.")
-      } finally {
+      setUsers(fetchedUsers)
+    } catch (error) {
+      console.error("[v0] Error fetching data:", error)
+      setError("Failed to fetch users. Check browser console for details.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    const auth = getAuth()
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setAuthUser(user)
+      setAuthLoading(false)
+      if (user) {
+        fetchUsers()
+      } else {
+        setUsers([])
         setLoading(false)
       }
-    }
+    })
 
-    fetchData()
+    return () => unsubscribe()
   }, [])
 
   const filteredUsers = users.filter((user) => {
@@ -64,6 +96,124 @@ export function UsersManagement() {
 
     return matchesSearch
   })
+
+  const openCreateForm = () => {
+    setFormMode("create")
+    setSelectedUser(null)
+    setFormData({
+      firstName: "",
+      lastName: "",
+      email: "",
+      phoneNumber: "",
+      address: "",
+      emergencyName: "",
+      emergencyNumber: "",
+    })
+  }
+
+  const openEditForm = (user: UserData) => {
+    setFormMode("edit")
+    setSelectedUser(user)
+    setFormData({
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      address: user.address,
+      emergencyName: user.emergencyName,
+      emergencyNumber: user.emergencyNumber,
+    })
+  }
+
+  const closeForm = () => {
+    setFormMode(null)
+    setSelectedUser(null)
+  }
+
+  const handleSignInAnonymously = async () => {
+    setError(null)
+    try {
+      setLoading(true)
+      const auth = getAuth()
+      await signInAnonymously(auth)
+    } catch (signInError) {
+      console.error("[v0] Anonymous sign-in failed:", signInError)
+      setError("Unable to sign in anonymously. Please check your Firebase auth settings.")
+      setLoading(false)
+    }
+  }
+
+  const handleFormChange = (field: keyof typeof formData, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const handleFormSubmit = async () => {
+    if (!formMode) return
+
+    setIsProcessing(true)
+    try {
+      if (formMode === "create") {
+        const createdUser = await createFirestoreUser({
+          ...formData,
+        })
+        setUsers((prev) => [
+          ...prev,
+          {
+            id: createdUser.id,
+            uid: createdUser.uid || createdUser.id,
+            firstName: createdUser.firstName,
+            lastName: createdUser.lastName,
+            email: createdUser.email,
+            phoneNumber: createdUser.phoneNumber,
+            address: createdUser.address,
+            emergencyName: createdUser.emergencyName,
+            emergencyNumber: createdUser.emergencyNumber,
+            createdAt: createdUser.createdAt,
+            emailVerified: createdUser.emailVerified,
+          },
+        ])
+      } else if (formMode === "edit" && selectedUser) {
+        await updateFirestoreUser(selectedUser.id, {
+          ...formData,
+        })
+        setUsers((prev) =>
+          prev.map((user) =>
+            user.id === selectedUser.id
+              ? {
+                  ...user,
+                  ...formData,
+                }
+              : user,
+          ),
+        )
+      }
+
+      closeForm()
+    } catch (operationError) {
+      console.error("[v0] Firestore CRUD operation error:", operationError)
+      setError("Unable to save user. Please check console and Firebase rules.")
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!confirm("Delete this user? This cannot be undone.")) return
+
+    setIsProcessing(true)
+    try {
+      await deleteFirestoreUser(userId)
+      setUsers((prev) => prev.filter((user) => user.id !== userId))
+      if (selectedUser?.id === userId) {
+        setSelectedUser(null)
+      }
+    } catch (deleteError) {
+      console.error("[v0] Delete user failed:", deleteError)
+      setError("Failed to delete user. Verify Firestore write rules and try again.")
+    } finally {
+      setIsProcessing(false)
+    }
+  }
 
   const handleExportCSV = () => {
     const headers = ["No.", "First Name", "Last Name", "Email", "Address", "Emergency Name", "Emergency Number"]
@@ -88,7 +238,7 @@ export function UsersManagement() {
     window.URL.revokeObjectURL(url)
   }
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-center">
@@ -96,6 +246,25 @@ export function UsersManagement() {
           <p className="text-muted-foreground">Loading users from Firestore...</p>
         </div>
       </div>
+    )
+  }
+
+  if (!authUser) {
+    return (
+      <Card className="border-warning/50 bg-warning/5">
+        <CardContent className="pt-6">
+          <div className="flex flex-col items-center gap-4 text-center">
+            <AlertCircle className="h-12 w-12 text-warning" />
+            <h3 className="text-xl font-semibold">Authentication required</h3>
+            <p className="text-muted-foreground">
+              You must sign in (anonymous auth or via your app sign-in flow) to view registered users.
+            </p>
+            <Button onClick={handleSignInAnonymously} disabled={isProcessing}>
+              {isProcessing ? "Signing in..." : "Sign in anonymously"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     )
   }
 
@@ -136,12 +305,78 @@ export function UsersManagement() {
           <Badge variant="secondary" className="w-fit">
             {filteredUsers.length} / {users.length} Users
           </Badge>
+          <Button onClick={openCreateForm} variant="secondary" size="sm" className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add User
+          </Button>
           <Button onClick={handleExportCSV} variant="outline" size="sm" className="gap-2 bg-transparent">
             <Download className="h-4 w-4" />
             Export CSV
           </Button>
         </div>
       </div>
+
+      {/* User Create/Edit Modal Dialog */}
+      <Dialog open={formMode !== null} onOpenChange={(open) => !open && closeForm()}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{formMode === "create" ? "Create New User" : "Edit User"}</DialogTitle>
+            <DialogDescription>
+              {formMode === "create"
+                ? "Fill in user details and save to Firestore."
+                : "Update the selected user and save changes to Firestore."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 md:grid-cols-2 py-4">
+            <Input
+              placeholder="First Name"
+              value={formData.firstName}
+              onChange={(e) => handleFormChange("firstName", e.target.value)}
+            />
+            <Input
+              placeholder="Last Name"
+              value={formData.lastName}
+              onChange={(e) => handleFormChange("lastName", e.target.value)}
+            />
+            <Input
+              placeholder="Email"
+              type="email"
+              value={formData.email}
+              onChange={(e) => handleFormChange("email", e.target.value)}
+            />
+            <Input
+              placeholder="Phone Number"
+              value={formData.phoneNumber}
+              onChange={(e) => handleFormChange("phoneNumber", e.target.value)}
+            />
+            <Input
+              placeholder="Address"
+              value={formData.address}
+              onChange={(e) => handleFormChange("address", e.target.value)}
+            />
+            <Input
+              placeholder="Emergency Contact Name"
+              value={formData.emergencyName}
+              onChange={(e) => handleFormChange("emergencyName", e.target.value)}
+            />
+            <Input
+              placeholder="Emergency Contact Number"
+              value={formData.emergencyNumber}
+              onChange={(e) => handleFormChange("emergencyNumber", e.target.value)}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeForm} disabled={isProcessing}>
+              Cancel
+            </Button>
+            <Button onClick={handleFormSubmit} disabled={isProcessing}>
+              {isProcessing ? "Saving..." : formMode === "create" ? "Create User" : "Update User"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Search */}
       <div className="relative">
@@ -153,6 +388,8 @@ export function UsersManagement() {
           className="pl-9"
         />
       </div>
+
+      {/* Empty State or Users Table continues below... */}
 
       {/* Empty State */}
       {filteredUsers.length === 0 ? (
@@ -212,9 +449,20 @@ export function UsersManagement() {
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-4 flex gap-1">
                         <Button variant="ghost" size="sm" onClick={() => setSelectedUser(user)} title="View details">
                           <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => openEditForm(user)} title="Edit user">
+                          <Edit3 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteUser(user.id)}
+                          title="Delete user"
+                        >
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </td>
                     </tr>

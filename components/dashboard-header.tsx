@@ -1,5 +1,9 @@
 "use client"
 
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { signOut } from "firebase/auth"
+import { getAuth } from "firebase/auth"
 import { Bell, Menu, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
@@ -19,6 +23,22 @@ interface DashboardHeaderProps {
 }
 
 export function DashboardHeader({ onMenuClick, activeAccidents }: DashboardHeaderProps) {
+  const [isSigningOut, setIsSigningOut] = useState(false)
+  const router = useRouter()
+
+  const handleSignOut = async () => {
+    setIsSigningOut(true)
+    try {
+      const auth = getAuth()
+      await signOut(auth)
+      console.log("[v0] User signed out successfully")
+      window.location.href = "http://localhost:3000"
+    } catch (error) {
+      console.error("[v0] Error signing out:", error)
+      setIsSigningOut(false)
+    }
+  }
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-16 items-center gap-4 px-4 md:px-6">
@@ -71,7 +91,9 @@ export function DashboardHeader({ onMenuClick, activeAccidents }: DashboardHeade
               <DropdownMenuItem>Profile</DropdownMenuItem>
               <DropdownMenuItem>Settings</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>Log out</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleSignOut} disabled={isSigningOut}>
+                {isSigningOut ? "Signing out..." : "Log out"}
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

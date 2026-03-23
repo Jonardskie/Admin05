@@ -1,7 +1,8 @@
 import { database, firestore } from "./firebase-config"
 import { ref, onValue, get, update, off, remove, set } from "firebase/database"
-import { doc, getDoc, collection, getDocs, query, onSnapshot } from "firebase/firestore"
+import { doc, getDoc, collection, getDocs, query, onSnapshot, setDoc, updateDoc, deleteDoc } from "firebase/firestore"
 import type { FirebaseUserData, AccidentSeverity, FirebaseAccident } from "./types"
+import admin from 'firebase-admin'
 
 // Calculate severity based on accelerometer data
 function calculateSeverity(accel: { x: number; y: number; z: number }): AccidentSeverity {
@@ -949,6 +950,58 @@ export async function getAllFirestoreUsers() {
   }
 }
 
+// Firestore CRUD helpers for user-management
+export async function createFirestoreUser(user: {
+  firstName: string
+  lastName: string
+  email: string
+  phoneNumber: string
+  address: string
+  emergencyName: string
+  emergencyNumber: string
+  emailVerified?: boolean
+}) {
+  const usersCollection = collection(firestore, "users")
+  const userRef = doc(usersCollection)
+
+  const now = new Date().toISOString()
+  const newUser = {
+    uid: userRef.id,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    email: user.email,
+    phoneNumber: user.phoneNumber,
+    address: user.address,
+    emergencyName: user.emergencyName,
+    emergencyNumber: user.emergencyNumber,
+    createdAt: now,
+    emailVerified: user.emailVerified ?? false,
+  }
+
+  await setDoc(userRef, newUser)
+  return { id: userRef.id, ...newUser }
+}
+
+export async function updateFirestoreUser(userId: string, user: {
+  firstName?: string
+  lastName?: string
+  email?: string
+  phoneNumber?: string
+  address?: string
+  emergencyName?: string
+  emergencyNumber?: string
+  emailVerified?: boolean
+}) {
+  const userRef = doc(firestore, "users", userId)
+  await updateDoc(userRef, user)
+  return { id: userId, ...user }
+}
+
+export async function deleteFirestoreUser(userId: string) {
+  const userRef = doc(firestore, "users", userId)
+  await deleteDoc(userRef)
+}
+
 export async function savePoliceReport(accidentId: string, reportText: string, personnel: string) {
   console.log("[v0] Saving police report for accident:", accidentId)
 
@@ -1067,3 +1120,4 @@ export function listenToUserStatus(userId: string, callback: (status: string) =>
     return () => {}
   }
 }
+
