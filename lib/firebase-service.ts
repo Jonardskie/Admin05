@@ -883,6 +883,12 @@ export async function getAllFirestoreUsers() {
 
     snapshot.forEach((doc) => {
       const userData = doc.data()
+
+      // hide admin users
+      if (userData.isAdmin === true) {
+        return
+      }
+
       users.push({
         id: doc.id,
         uid: userData.uid || doc.id,
@@ -895,18 +901,19 @@ export async function getAllFirestoreUsers() {
         emergencyNumber: userData.emergencyNumber || "N/A",
         createdAt: userData.createdAt || new Date().toISOString(),
         emailVerified: userData.emailVerified || false,
+        status: userData.status || "pending",
+        vehicleOrUrl: userData.vehicleOrUrl || "",
+        vehicleCrUrl: userData.vehicleCrUrl || "",
+        isAdmin: userData.isAdmin || false,
       })
     })
 
     console.log("[v0] Successfully fetched users from Firestore:", users.length)
-
     return users
   } catch (error: any) {
     if (error?.code === "permission-denied" || error?.message?.includes("permission")) {
       console.error(
-        "[v0] FIRESTORE PERMISSION DENIED: The 'users' collection is not readable. " +
-          "Update your Firestore security rules to allow reading. " +
-          "See FIRESTORE_RULES_UPDATE.md for instructions.",
+        "[v0] FIRESTORE PERMISSION DENIED: The 'users' collection is not readable.",
       )
     } else if (error?.code === "not-found" || error?.message?.includes("not found")) {
       console.error("[v0] FIRESTORE COLLECTION NOT FOUND: The 'users' collection does not exist in Firestore.")
@@ -914,36 +921,90 @@ export async function getAllFirestoreUsers() {
       console.error("[v0] FIRESTORE ERROR:", error?.message || error)
     }
 
-    console.log("[v0] Attempting fallback: fetching users from Realtime Database at 'users' path...")
-    try {
-      const usersRef = ref(database, "users")
-      const snapshot = await get(usersRef)
-      const data = snapshot.val()
+    return []
+  }
+}
 
-      if (data) {
-        const users: any[] = []
-        Object.entries(data).forEach(([userId, userData]: [string, any]) => {
-          users.push({
-            id: userId,
-            uid: userData.uid || userId,
-            firstName: userData.firstName || userData.name || "",
-            lastName: userData.lastName || "",
-            email: userData.email || "N/A",
-            phoneNumber: userData.phoneNumber || userData.phone || "N/A",
-            address: userData.address || "N/A",
-            emergencyName: userData.emergencyName || "N/A",
-            emergencyNumber: userData.emergencyNumber || "N/A",
-            createdAt: userData.createdAt || new Date().toISOString(),
-            emailVerified: userData.emailVerified || false,
-          })
-        })
-        console.log("[v0] Successfully fetched users from Realtime Database:", users.length)
-        return users
-      } else {
-        console.log("[v0] No users found in Realtime Database 'users' path")
-      }
-    } catch (fallbackError) {
-      console.error("[v0] Fallback to Realtime Database also failed:", fallbackError)
+export async function getPendingFirestoreUsers() {
+  try {
+    console.log("[v0] Fetching pending users from Firestore collection 'pending_users'...")
+
+    const pendingCollection = collection(firestore, "pending_users")
+    const snapshot = await getDocs(pendingCollection)
+    const users: any[] = []
+
+    snapshot.forEach((doc) => {
+      const userData = doc.data()
+      users.push({
+        id: doc.id,
+        uid: userData.uid || doc.id,
+        firstName: userData.firstName || "",
+        lastName: userData.lastName || "",
+        email: userData.email || "N/A",
+        phoneNumber: userData.phoneNumber || userData.phone || "N/A",
+        address: userData.address || "N/A",
+        emergencyName: userData.emergencyName || "N/A",
+        emergencyNumber: userData.emergencyNumber || "N/A",
+        createdAt: userData.createdAt || new Date().toISOString(),
+        emailVerified: userData.emailVerified || false,
+        status: "pending",
+      })
+    })
+
+    console.log("[v0] Successfully fetched pending users:", users.length)
+    return users
+  } catch (error: any) {
+    if (error?.code === "permission-denied" || error?.message?.includes("permission")) {
+      console.error(
+        "[v0] FIRESTORE PERMISSION DENIED: The 'pending_users' collection is not readable.",
+      )
+    } else if (error?.code === "not-found" || error?.message?.includes("not found")) {
+      console.error("[v0] FIRESTORE COLLECTION NOT FOUND: The 'pending_users' collection does not exist.")
+    } else {
+      console.error("[v0] ERROR fetching pending users:", error?.message || error)
+    }
+
+    return []
+  }
+}
+
+export async function getApprovedFirestoreUsers() {
+  try {
+    console.log("[v0] Fetching approved users from Firestore collection 'approved_users'...")
+
+    const approvedCollection = collection(firestore, "approved_users")
+    const snapshot = await getDocs(approvedCollection)
+    const users: any[] = []
+
+    snapshot.forEach((doc) => {
+      const userData = doc.data()
+      users.push({
+        id: doc.id,
+        uid: userData.uid || doc.id,
+        firstName: userData.firstName || "",
+        lastName: userData.lastName || "",
+        email: userData.email || "N/A",
+        phoneNumber: userData.phoneNumber || userData.phone || "N/A",
+        address: userData.address || "N/A",
+        emergencyName: userData.emergencyName || "N/A",
+        emergencyNumber: userData.emergencyNumber || "N/A",
+        createdAt: userData.createdAt || new Date().toISOString(),
+        emailVerified: userData.emailVerified || false,
+        status: "approved",
+      })
+    })
+
+    console.log("[v0] Successfully fetched approved users:", users.length)
+    return users
+  } catch (error: any) {
+    if (error?.code === "permission-denied" || error?.message?.includes("permission")) {
+      console.error(
+        "[v0] FIRESTORE PERMISSION DENIED: The 'approved_users' collection is not readable.",
+      )
+    } else if (error?.code === "not-found" || error?.message?.includes("not found")) {
+      console.error("[v0] FIRESTORE COLLECTION NOT FOUND: The 'approved_users' collection does not exist.")
+    } else {
+      console.error("[v0] ERROR fetching approved users:", error?.message || error)
     }
 
     return []
@@ -959,6 +1020,9 @@ export async function createFirestoreUser(user: {
   address: string
   emergencyName: string
   emergencyNumber: string
+  vehicleOrUrl?: string
+  vehicleCrUrl?: string
+  status?: "pending" | "approved"
   emailVerified?: boolean
 }) {
   const usersCollection = collection(firestore, "users")
@@ -974,6 +1038,9 @@ export async function createFirestoreUser(user: {
     address: user.address,
     emergencyName: user.emergencyName,
     emergencyNumber: user.emergencyNumber,
+    vehicleOrUrl: user.vehicleOrUrl || "",
+    vehicleCrUrl: user.vehicleCrUrl || "",
+    status: user.status || "pending",
     createdAt: now,
     emailVerified: user.emailVerified ?? false,
   }
@@ -990,13 +1057,15 @@ export async function updateFirestoreUser(userId: string, user: {
   address?: string
   emergencyName?: string
   emergencyNumber?: string
+  vehicleOrUrl?: string
+  vehicleCrUrl?: string
+  status?: "pending" | "approved"
   emailVerified?: boolean
 }) {
   const userRef = doc(firestore, "users", userId)
   await updateDoc(userRef, user)
   return { id: userId, ...user }
 }
-
 export async function deleteFirestoreUser(userId: string) {
   const userRef = doc(firestore, "users", userId)
   await deleteDoc(userRef)

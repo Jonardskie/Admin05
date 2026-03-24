@@ -57,6 +57,8 @@
     "react-day-picker": "9.8.0",
     "react-dom": "19.1.0",
     "react-hook-form": "^7.60.0",
+    "react-hot-toast": "^2.6.0",
+    "react-is": "^19.2.4",
     "react-leaflet": "^5.0.0",
     "react-resizable-panels": "^2.1.7",
     "react-toastify": "latest",

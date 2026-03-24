@@ -1,14 +1,20 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { getAuth, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword, signOut, getIdTokenResult } from "firebase/auth"
+import { getAuth, onAuthStateChanged, signInAnonymously, getIdTokenResult } from "firebase/auth"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Search, Download, Eye, Mail, Phone, MapPin, AlertCircle, ExternalLink, Edit3, Trash2, Plus } from "lucide-react"
-import { getAllFirestoreUsers, createFirestoreUser, updateFirestoreUser, deleteFirestoreUser } from "@/lib/firebase-service"
+import {
+  getAllFirestoreUsers,
+  createFirestoreUser,
+  updateFirestoreUser,
+  deleteFirestoreUser,
+} from "@/lib/firebase-service"
 
 interface UserData {
   id: string
@@ -22,6 +28,10 @@ interface UserData {
   emergencyNumber: string
   createdAt: string
   emailVerified: boolean
+  status: "pending" | "approved"
+  vehicleOrUrl: string
+  vehicleCrUrl: string
+  isAdmin?: boolean
 }
 
 export function UsersManagement() {
@@ -30,7 +40,10 @@ export function UsersManagement() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null)
   const [formMode, setFormMode] = useState<"create" | "edit" | null>(null)
-  const [formData, setFormData] = useState<Omit<UserData, "id" | "uid" | "createdAt" | "emailVerified">>({
+  const [activeTab, setActiveTab] = useState("all")
+  const [formData, setFormData] = useState<
+    Omit<UserData, "id" | "uid" | "createdAt" | "emailVerified" | "status" | "isAdmin">
+  >({
     firstName: "",
     lastName: "",
     email: "",
@@ -38,30 +51,48 @@ export function UsersManagement() {
     address: "",
     emergencyName: "",
     emergencyNumber: "",
+    vehicleOrUrl: "",
+    vehicleCrUrl: "",
   })
   const [isProcessing, setIsProcessing] = useState(false)
   const [authUser, setAuthUser] = useState<any>(null)
   const [authLoading, setAuthLoading] = useState(true)
-  const [authEmail, setAuthEmail] = useState("")
-  const [authPassword, setAuthPassword] = useState("")
   const [isAdminClaim, setIsAdminClaim] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const fetchUsers = async () => {
     setLoading(true)
     setError(null)
+
     try {
-      console.log("[v0] Fetching all Firestore users")
+      console.log("[v0] Fetching users from Firestore 'users' collection")
       const fetchedUsers = await getAllFirestoreUsers()
-      console.log("[v0] Received users from Firestore:", fetchedUsers.length)
 
-      if (fetchedUsers.length === 0) {
-        setError(
-          "No users found. Please check: 1) Firestore 'user' collection has documents, 2) Security rules allow reading (update in Firebase Console), or 3) Users exist in Realtime Database under 'users' path",
-        )
+      const normalizedUsers: UserData[] = fetchedUsers
+        .filter((user: any) => user.isAdmin !== true)
+        .map((user: any) => ({
+          id: user.id,
+          uid: user.uid || user.id,
+          firstName: user.firstName || "",
+          lastName: user.lastName || "",
+          email: user.email || "N/A",
+          phoneNumber: user.phoneNumber || "N/A",
+          address: user.address || "N/A",
+          emergencyName: user.emergencyName || "N/A",
+          emergencyNumber: user.emergencyNumber || "N/A",
+          createdAt: user.createdAt || new Date().toISOString(),
+          emailVerified: user.emailVerified || false,
+          status: user.status === "approved" ? "approved" : "pending",
+          vehicleOrUrl: user.vehicleOrUrl || "",
+          vehicleCrUrl: user.vehicleCrUrl || "",
+          isAdmin: user.isAdmin || false,
+        }))
+
+      setUsers(normalizedUsers)
+
+      if (normalizedUsers.length === 0) {
+        setError("No non-admin users found in the Firestore 'users' collection.")
       }
-
-      setUsers(fetchedUsers)
     } catch (error) {
       console.error("[v0] Error fetching data:", error)
       setError("Failed to fetch users. Check browser console for details.")
@@ -72,30 +103,83 @@ export function UsersManagement() {
 
   useEffect(() => {
     const auth = getAuth()
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setAuthUser(user)
-      setAuthLoading(false)
-      if (user) {
-        fetchUsers()
-      } else {
+
+      if (!user) {
         setUsers([])
         setLoading(false)
+        setAuthLoading(false)
+        setError("You must be signed in as an admin to view users.")
+        return
+      }
+
+      try {
+        const idTokenResult = await getIdTokenResult(user)
+        console.log("[v0] Signed in UID:", user.uid)
+        console.log("[v0] Token claims:", idTokenResult.claims)
+
+        const { doc, getDoc } = await import("firebase/firestore")
+        const { firestore } = await import("@/lib/firebase-config")
+
+        const userRef = doc(firestore, "users", user.uid)
+        const userSnap = await getDoc(userRef)
+
+        if (!userSnap.exists()) {
+          setUsers([])
+          setLoading(false)
+          setAuthLoading(false)
+          setError("Your Firestore user record was not found.")
+          return
+        }
+
+        const userData = userSnap.data()
+        const isAdmin = userData?.isAdmin === true
+
+        console.log("[v0] Firestore user data:", userData)
+
+        if (!isAdmin) {
+          setUsers([])
+          setLoading(false)
+          setAuthLoading(false)
+          setError("Access denied. Admin only.")
+          return
+        }
+
+        setIsAdminClaim(true)
+        await fetchUsers()
+      } catch (error) {
+        console.error("[v0] Failed admin check:", error)
+        setUsers([])
+        setLoading(false)
+        setError("Failed to verify admin access.")
+      } finally {
+        setAuthLoading(false)
       }
     })
 
     return () => unsubscribe()
   }, [])
 
-  const filteredUsers = users.filter((user) => {
-    const matchesSearch =
-      user.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.phoneNumber.includes(searchQuery) ||
-      user.address.toLowerCase().includes(searchQuery.toLowerCase())
+  const filterUsers = (list: UserData[]) => {
+    return list.filter((user) => {
+      return (
+        user.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        user.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        user.phoneNumber.includes(searchQuery) ||
+        user.address.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    })
+  }
 
-    return matchesSearch
-  })
+  const pendingUsers = users.filter((user) => user.status === "pending")
+  const approvedUsers = users.filter((user) => user.status === "approved")
+
+  const filteredPendingUsers = filterUsers(pendingUsers)
+  const filteredApprovedUsers = filterUsers(approvedUsers)
+  const filteredAllUsers = filterUsers(users)
 
   const openCreateForm = () => {
     setFormMode("create")
@@ -108,6 +192,8 @@ export function UsersManagement() {
       address: "",
       emergencyName: "",
       emergencyNumber: "",
+      vehicleOrUrl: "",
+      vehicleCrUrl: "",
     })
   }
 
@@ -122,6 +208,8 @@ export function UsersManagement() {
       address: user.address,
       emergencyName: user.emergencyName,
       emergencyNumber: user.emergencyNumber,
+      vehicleOrUrl: user.vehicleOrUrl,
+      vehicleCrUrl: user.vehicleCrUrl,
     })
   }
 
@@ -153,41 +241,17 @@ export function UsersManagement() {
     setIsProcessing(true)
     try {
       if (formMode === "create") {
-        const createdUser = await createFirestoreUser({
+        await createFirestoreUser({
           ...formData,
+          status: "pending",
         })
-        setUsers((prev) => [
-          ...prev,
-          {
-            id: createdUser.id,
-            uid: createdUser.uid || createdUser.id,
-            firstName: createdUser.firstName,
-            lastName: createdUser.lastName,
-            email: createdUser.email,
-            phoneNumber: createdUser.phoneNumber,
-            address: createdUser.address,
-            emergencyName: createdUser.emergencyName,
-            emergencyNumber: createdUser.emergencyNumber,
-            createdAt: createdUser.createdAt,
-            emailVerified: createdUser.emailVerified,
-          },
-        ])
       } else if (formMode === "edit" && selectedUser) {
         await updateFirestoreUser(selectedUser.id, {
           ...formData,
         })
-        setUsers((prev) =>
-          prev.map((user) =>
-            user.id === selectedUser.id
-              ? {
-                  ...user,
-                  ...formData,
-                }
-              : user,
-          ),
-        )
       }
 
+      await fetchUsers()
       closeForm()
     } catch (operationError) {
       console.error("[v0] Firestore CRUD operation error:", operationError)
@@ -203,7 +267,8 @@ export function UsersManagement() {
     setIsProcessing(true)
     try {
       await deleteFirestoreUser(userId)
-      setUsers((prev) => prev.filter((user) => user.id !== userId))
+      await fetchUsers()
+
       if (selectedUser?.id === userId) {
         setSelectedUser(null)
       }
@@ -215,9 +280,53 @@ export function UsersManagement() {
     }
   }
 
+    const handleApproveUser = async (user: UserData) => {
+    if (!confirm(`Approve ${user.firstName} ${user.lastName}?`)) return
+
+    setIsProcessing(true)
+    try {
+      await updateFirestoreUser(user.id, {
+        status: "approved",
+      })
+
+      await fetchUsers()
+
+      if (selectedUser?.id === user.id) {
+        setSelectedUser({
+          ...selectedUser,
+          status: "approved",
+        })
+      }
+    } catch (approveError) {
+      console.error("[v0] Approve user failed:", approveError)
+      setError("Failed to approve user. Verify Firestore write rules and try again.")
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
   const handleExportCSV = () => {
-    const headers = ["No.", "First Name", "Last Name", "Email", "Address", "Emergency Name", "Emergency Number"]
-    const rows = filteredUsers.map((user, index) => [
+    const source =
+      activeTab === "pending"
+        ? filteredPendingUsers
+        : activeTab === "approved"
+          ? filteredApprovedUsers
+          : filteredAllUsers
+
+    const headers = [
+      "No.",
+      "First Name",
+      "Last Name",
+      "Email",
+      "Address",
+      "Emergency Name",
+      "Emergency Number",
+      "Status",
+      "Vehicle OR",
+      "Vehicle CR",
+    ]
+
+    const rows = source.map((user, index) => [
       index + 1,
       user.firstName,
       user.lastName,
@@ -225,17 +334,189 @@ export function UsersManagement() {
       user.address,
       user.emergencyName,
       user.emergencyNumber,
+      user.status,
+      user.vehicleOrUrl,
+      user.vehicleCrUrl,
     ])
 
-    const csv = [headers, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n")
+    const csv = [headers, ...rows].map((row) => row.map((cell) => `"${cell ?? ""}"`).join(",")).join("\n")
 
     const blob = new Blob([csv], { type: "text/csv" })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `users-export-${new Date().toISOString().split("T")[0]}.csv`
+    a.download = `users-export-${activeTab}-${new Date().toISOString().split("T")[0]}.csv`
     a.click()
     window.URL.revokeObjectURL(url)
+  }
+
+  const renderStatusBadge = (status: "pending" | "approved") => {
+    return status === "approved" ? (
+      <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Approved</Badge>
+    ) : (
+      <Badge variant="secondary" className="bg-yellow-100 text-yellow-700 hover:bg-yellow-100">
+        Pending
+      </Badge>
+    )
+  }
+
+  const renderTable = (list: UserData[], showStatus = false) => {
+    if (list.length === 0) {
+      return (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+            <p className="text-lg font-medium">No users found</p>
+            <p className="text-sm text-muted-foreground">
+              {searchQuery ? "Try adjusting your search" : "No registered users in this section"}
+            </p>
+          </CardContent>
+        </Card>
+      )
+    }
+
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            {activeTab === "pending"
+              ? "Pending Users"
+              : activeTab === "approved"
+                ? "Approved Users"
+                : "All Registered Users"}
+          </CardTitle>
+          <CardDescription>
+            {activeTab === "pending"
+              ? "Users waiting for admin approval"
+              : activeTab === "approved"
+                ? "Users already approved"
+                : "Complete list of all users with approval status"}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="text-left py-3 px-4 font-semibold">No.</th>
+                  <th className="text-left py-3 px-4 font-semibold">First Name</th>
+                  <th className="text-left py-3 px-4 font-semibold">Last Name</th>
+                  <th className="text-left py-3 px-4 font-semibold">Email</th>
+                  <th className="text-left py-3 px-4 font-semibold">Address</th>
+                  <th className="text-left py-3 px-4 font-semibold">Emergency Contact</th>
+                  {showStatus && <th className="text-left py-3 px-4 font-semibold">Status</th>}
+                  <th className="text-left py-3 px-4 font-semibold">Vehicle OR</th>
+                  <th className="text-left py-3 px-4 font-semibold">Vehicle CR</th>
+                  <th className="text-left py-3 px-4 font-semibold">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((user, index) => (
+                  <tr key={`${user.status}-${user.id}`} className="border-b hover:bg-muted/50 transition-colors">
+                    <td className="py-3 px-4 font-medium text-muted-foreground">{index + 1}</td>
+                    <td className="py-3 px-4 font-medium">{user.firstName}</td>
+                    <td className="py-3 px-4">{user.lastName}</td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <Mail className="h-4 w-4 text-muted-foreground" />
+                        <span className="truncate">{user.email}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-muted-foreground" />
+                        <span className="truncate text-sm">{user.address}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="space-y-1">
+                        <p className="font-medium text-sm">{user.emergencyName}</p>
+                        <div className="flex items-center gap-1">
+                          <Phone className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground">{user.emergencyNumber}</span>
+                        </div>
+                      </div>
+                    </td>
+
+                    {showStatus && <td className="py-3 px-4">{renderStatusBadge(user.status)}</td>}
+
+                    <td className="py-3 px-4">
+                      {user.vehicleOrUrl ? (
+                        <a
+                          href={user.vehicleOrUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          View OR
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground">N/A</span>
+                      )}
+                    </td>
+
+                    <td className="py-3 px-4">
+                      {user.vehicleCrUrl ? (
+                        <a
+                          href={user.vehicleCrUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          View CR
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground">N/A</span>
+                      )}
+                    </td>
+
+                    <td className="py-3 px-4">
+                      {user.status === "pending" ? (
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                            onClick={() => handleApproveUser(user)}
+                            disabled={isProcessing}
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleDeleteUser(user.id)}
+                            disabled={isProcessing}
+                          >
+                            Reject
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => setSelectedUser(user)} title="View details">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => openEditForm(user)} title="Edit user">
+                            <Edit3 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteUser(user.id)}
+                            title="Delete user"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
   if (authLoading || loading) {
@@ -262,6 +543,22 @@ export function UsersManagement() {
             <Button onClick={handleSignInAnonymously} disabled={isProcessing}>
               {isProcessing ? "Signing in..." : "Sign in anonymously"}
             </Button>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (!isAdminClaim) {
+    return (
+      <Card className="border-warning/50 bg-warning/5">
+        <CardContent className="pt-6">
+          <div className="flex flex-col items-center gap-4 text-center">
+            <AlertCircle className="h-12 w-12 text-warning" />
+            <h3 className="text-xl font-semibold">Admin access required</h3>
+            <p className="text-muted-foreground">
+              You must be signed in with an admin account to view registered users.
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -295,15 +592,20 @@ export function UsersManagement() {
         </Card>
       )}
 
-      {/* Header Section */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Registered Users</h2>
-          <p className="text-muted-foreground">View all registered users from your Firestore database</p>
+          <p className="text-muted-foreground">View and manage pending, approved, and all users</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Badge variant="secondary" className="w-fit">
-            {filteredUsers.length} / {users.length} Users
+            Pending: {filteredPendingUsers.length}
+          </Badge>
+          <Badge variant="secondary" className="w-fit">
+            Approved: {filteredApprovedUsers.length}
+          </Badge>
+          <Badge variant="secondary" className="w-fit">
+            All: {filteredAllUsers.length}
           </Badge>
           <Button onClick={openCreateForm} variant="secondary" size="sm" className="gap-2">
             <Plus className="h-4 w-4" />
@@ -316,7 +618,6 @@ export function UsersManagement() {
         </div>
       </div>
 
-      {/* User Create/Edit Modal Dialog */}
       <Dialog open={formMode !== null} onOpenChange={(open) => !open && closeForm()}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -365,6 +666,16 @@ export function UsersManagement() {
               value={formData.emergencyNumber}
               onChange={(e) => handleFormChange("emergencyNumber", e.target.value)}
             />
+            <Input
+              placeholder="Vehicle OR URL"
+              value={formData.vehicleOrUrl}
+              onChange={(e) => handleFormChange("vehicleOrUrl", e.target.value)}
+            />
+            <Input
+              placeholder="Vehicle CR URL"
+              value={formData.vehicleCrUrl}
+              onChange={(e) => handleFormChange("vehicleCrUrl", e.target.value)}
+            />
           </div>
 
           <DialogFooter>
@@ -378,7 +689,6 @@ export function UsersManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Search */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -389,90 +699,17 @@ export function UsersManagement() {
         />
       </div>
 
-      {/* Empty State or Users Table continues below... */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="pending">Pending Users</TabsTrigger>
+          <TabsTrigger value="approved">Approved Users</TabsTrigger>
+          <TabsTrigger value="all">All Users</TabsTrigger>
+        </TabsList>
 
-      {/* Empty State */}
-      {filteredUsers.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-lg font-medium">No users found</p>
-            <p className="text-sm text-muted-foreground">
-              {searchQuery ? "Try adjusting your search" : "No registered users in the database"}
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>All Registered Users</CardTitle>
-            <CardDescription>Complete list of users from your Firestore database</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="text-left py-3 px-4 font-semibold">No.</th>
-                    <th className="text-left py-3 px-4 font-semibold">First Name</th>
-                    <th className="text-left py-3 px-4 font-semibold">Last Name</th>
-                    <th className="text-left py-3 px-4 font-semibold">Email</th>
-                    <th className="text-left py-3 px-4 font-semibold">Address</th>
-                    <th className="text-left py-3 px-4 font-semibold">Emergency Contact</th>
-                    <th className="text-left py-3 px-4 font-semibold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredUsers.map((user, index) => (
-                    <tr key={user.id} className="border-b hover:bg-muted/50 transition-colors">
-                      <td className="py-3 px-4 font-medium text-muted-foreground">{index + 1}</td>
-                      <td className="py-3 px-4 font-medium">{user.firstName}</td>
-                      <td className="py-3 px-4">{user.lastName}</td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <Mail className="h-4 w-4 text-muted-foreground" />
-                          <span className="truncate">{user.email}</span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <MapPin className="h-4 w-4 text-muted-foreground" />
-                          <span className="truncate text-sm">{user.address}</span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="space-y-1">
-                          <p className="font-medium text-sm">{user.emergencyName}</p>
-                          <div className="flex items-center gap-1">
-                            <Phone className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-xs text-muted-foreground">{user.emergencyNumber}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 flex gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => setSelectedUser(user)} title="View details">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => openEditForm(user)} title="Edit user">
-                          <Edit3 className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteUser(user.id)}
-                          title="Delete user"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+        <TabsContent value="pending">{renderTable(filteredPendingUsers, false)}</TabsContent>
+        <TabsContent value="approved">{renderTable(filteredApprovedUsers, false)}</TabsContent>
+        <TabsContent value="all">{renderTable(filteredAllUsers, true)}</TabsContent>
+      </Tabs>
     </div>
   )
 }
