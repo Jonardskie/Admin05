@@ -28,72 +28,75 @@ export default function AdminLoginPage() {
   const router = useRouter()
 
   const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setResetMessage("")
+  e.preventDefault()
+  setLoading(true)
+  setResetMessage("")
 
+  try {
+    const cleanEmail = email.trim().toLowerCase()
+
+    let userCredential
     try {
-      const cleanEmail = email.trim().toLowerCase()
-
-      const userCredential = await signInWithEmailAndPassword(
+      userCredential = await signInWithEmailAndPassword(
         auth,
         cleanEmail,
         password
       )
-      const user = userCredential.user
-
-      const userDocRef = doc(db, "users", user.uid)
-      const userDocSnap = await getDoc(userDocRef)
-
-      if (!userDocSnap.exists()) {
-        await signOut(auth)
-        toast.error("User record not found in Firestore.")
-        return
-      }
-
-      const userData = userDocSnap.data() as UserData
-
-      if (userData.isAdmin !== true) {
-        await signOut(auth)
-        toast.error("Access denied. This page is for admin only.")
-        return
-      }
-
-      const token = await user.getIdToken()
-
-      document.cookie = `token=${token}; path=/; max-age=3600; samesite=strict`
-      document.cookie = `isAdmin=true; path=/; max-age=3600; samesite=strict`
-
-      toast.success("Admin signed in successfully!")
-      router.push("/admin")
-    } catch (error: any) {
-      console.error("Admin sign-in error:", error)
-
-      let errorMessage = "Something went wrong. Please try again."
-
-      switch (error?.code) {
-        case "auth/invalid-email":
-          errorMessage = "Please enter a valid email address."
-          break
-        case "auth/user-not-found":
-          errorMessage = "No admin account found with that email."
-          break
-        case "auth/wrong-password":
-          errorMessage = "Incorrect password. Try again."
-          break
-        case "auth/invalid-credential":
-          errorMessage = "Invalid email or password."
-          break
-        case "permission-denied":
-          errorMessage = "Firestore permission denied."
-          break
-      }
-
-      toast.error(errorMessage)
-    } finally {
-      setLoading(false)
+    } catch (err: any) {
+      // prevent Next.js error overlay
+      throw { code: err?.code || "auth/unknown" }
     }
+
+    const user = userCredential.user
+
+    const userDocRef = doc(db, "users", user.uid)
+    const userDocSnap = await getDoc(userDocRef)
+
+    if (!userDocSnap.exists()) {
+      await signOut(auth)
+      toast.error("User record not found in Firestore.")
+      return
+    }
+
+    const userData = userDocSnap.data() as UserData
+
+    if (userData.isAdmin !== true) {
+      await signOut(auth)
+      toast.error("Access denied. Admins only.")
+      return
+    }
+
+    const token = await user.getIdToken()
+
+    document.cookie = `token=${token}; path=/; max-age=3600; samesite=strict`
+    document.cookie = `isAdmin=true; path=/; max-age=3600; samesite=strict`
+
+    toast.success("Admin signed in successfully!")
+    router.push("/admin")
+
+  } catch (error: any) {
+    let errorMessage = "Login failed. Please try again."
+
+    switch (error?.code) {
+      case "auth/invalid-email":
+        errorMessage = "Please enter a valid email address."
+        break
+      case "auth/user-not-found":
+        errorMessage = "No admin account found."
+        break
+      case "auth/wrong-password":
+        errorMessage = "Incorrect password."
+        break
+      case "auth/invalid-credential":
+        errorMessage = "Invalid email or password."
+        break
+    }
+
+    toast.error(errorMessage)
+  } finally {
+    setLoading(false)
   }
+}
 
   const handleForgotPassword = async () => {
     const cleanEmail = email.trim().toLowerCase()
@@ -195,6 +198,15 @@ export default function AdminLoginPage() {
               "Sign in as Admin"
             )}
           </Button>
+            <div className="text-center mt-4">
+                <button
+                  type="button"
+                  onClick={() => router.push("http://localhost:3001/auth/signin")}
+                  className="text-blue-700 font-semibold hover:underline"
+                >
+                  Sign in as User
+                </button>
+              </div>
         </form>
       </div>
     </div>

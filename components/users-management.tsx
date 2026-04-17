@@ -261,50 +261,136 @@ export function UsersManagement() {
     }
   }
 
-  const handleDeleteUser = async (userId: string) => {
-    if (!confirm("Delete this user? This cannot be undone.")) return
+        //reject user by deleting from Firestore and Firebase Auth, and send rejection email before deletion
+        const handleRejectUser = async (user: UserData) => {
+        if (!confirm(`Reject ${user.firstName} ${user.lastName}? This will remove their account completely.`)) return
 
-    setIsProcessing(true)
-    try {
-      await deleteFirestoreUser(userId)
-      await fetchUsers()
+        setIsProcessing(true)
+        setError(null)
 
-      if (selectedUser?.id === userId) {
-        setSelectedUser(null)
+        try {
+          const currentUser = getAuth().currentUser
+          if (!currentUser) {
+            throw new Error("No authenticated admin user found.")
+          }
+
+          const idToken = await currentUser.getIdToken()
+
+          const response = await fetch("/admin/api/reject-user", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${idToken}`,
+            },
+            body: JSON.stringify({ uid: user.uid }),
+          })
+
+          const data = await response.json()
+
+          if (!response.ok) {
+            throw new Error(data.error || "Failed to reject user")
+          }
+
+          await fetchUsers()
+
+          if (selectedUser?.id === user.id) {
+            setSelectedUser(null)
+          }
+        } catch (error: any) {
+          console.error("[v0] Reject user failed:", error)
+          setError(error.message || "Failed to reject user.")
+        } finally {
+          setIsProcessing(false)
+        }
       }
-    } catch (deleteError) {
-      console.error("[v0] Delete user failed:", deleteError)
-      setError("Failed to delete user. Verify Firestore write rules and try again.")
-    } finally {
-      setIsProcessing(false)
-    }
-  }
+
+      //delete user permanently from Firestore and Firebase Auth, and send rejection email before deletion
+      const handleDeleteUser = async (user: UserData) => {
+        if (!confirm(`Delete ${user.firstName} ${user.lastName}? This will permanently remove the account.`)) return
+
+        setIsProcessing(true)
+        setError(null)
+
+        try {
+          const currentUser = getAuth().currentUser
+          if (!currentUser) {
+            throw new Error("No authenticated admin user found.")
+          }
+
+          const idToken = await currentUser.getIdToken()
+
+          const response = await fetch("/admin/api/delete-user", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${idToken}`,
+            },
+            body: JSON.stringify({ uid: user.uid }),
+          })
+
+          const data = await response.json()
+
+          if (!response.ok) {
+            throw new Error(data.error || "Failed to delete user")
+          }
+
+          await fetchUsers()
+
+          if (selectedUser?.id === user.id) {
+            setSelectedUser(null)
+          }
+        } catch (error: any) {
+          console.error("[v0] Delete user failed:", error)
+          setError(error.message || "Failed to delete user.")
+        } finally {
+          setIsProcessing(false)
+        }
+      }
 
     const handleApproveUser = async (user: UserData) => {
-    if (!confirm(`Approve ${user.firstName} ${user.lastName}?`)) return
+  if (!confirm(`Approve ${user.firstName} ${user.lastName}?`)) return
 
-    setIsProcessing(true)
-    try {
-      await updateFirestoreUser(user.id, {
+  setIsProcessing(true)
+  setError(null)
+
+  try {
+    const currentUser = getAuth().currentUser
+    if (!currentUser) {
+      throw new Error("No authenticated admin user found.")
+    }
+
+    const idToken = await currentUser.getIdToken()
+
+    const response = await fetch("/admin/api/approve-user", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify({ uid: user.uid }),
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to approve user")
+    }
+
+    await fetchUsers()
+
+    if (selectedUser?.id === user.id) {
+      setSelectedUser({
+        ...selectedUser,
         status: "approved",
       })
-
-      await fetchUsers()
-
-      if (selectedUser?.id === user.id) {
-        setSelectedUser({
-          ...selectedUser,
-          status: "approved",
-        })
-      }
-    } catch (approveError) {
-      console.error("[v0] Approve user failed:", approveError)
-      setError("Failed to approve user. Verify Firestore write rules and try again.")
-    } finally {
-      setIsProcessing(false)
     }
+  } catch (error: any) {
+    console.error("[v0] Approve user failed:", error)
+    setError(error.message || "Failed to approve user.")
+  } finally {
+    setIsProcessing(false)
   }
-
+}
   const handleExportCSV = () => {
     const source =
       activeTab === "pending"
@@ -484,7 +570,7 @@ export function UsersManagement() {
                           <Button
                             size="sm"
                             variant="destructive"
-                            onClick={() => handleDeleteUser(user.id)}
+                            onClick={() => handleRejectUser(user)}
                             disabled={isProcessing}
                           >
                             Reject
@@ -501,7 +587,7 @@ export function UsersManagement() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleDeleteUser(user.id)}
+                            onClick={() => handleDeleteUser(user)}
                             title="Delete user"
                           >
                             <Trash2 className="h-4 w-4" />
