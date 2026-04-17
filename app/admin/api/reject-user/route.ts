@@ -21,13 +21,13 @@ export async function POST(req: Request) {
     const idToken = authHeader.split("Bearer ")[1];
     const decodedToken = await getAuth().verifyIdToken(idToken);
 
-    const adminDoc = await adminDb.collection("users").doc(decodedToken.uid).get();
+const adminDoc = await adminDb().collection("users").doc(decodedToken.uid).get();
     if (!adminDoc.exists || adminDoc.data()?.isAdmin !== true) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
     // Get the user data first before deleting
-    const userDoc = await adminDb.collection("users").doc(uid).get();
+const userDoc = await adminDb().collection("users").doc(uid).get();
 
     if (!userDoc.exists) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -84,10 +84,10 @@ export async function POST(req: Request) {
     });
 
     // Delete from Firebase Authentication
-    await adminAuth.deleteUser(uid);
+await adminAuth().deleteUser(uid);
 
     // Delete from Firestore
-    await adminDb.collection("users").doc(uid).delete();
+await adminDb().collection("users").doc(uid).delete();
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

@@ -20,12 +20,12 @@ export async function POST(req: Request) {
     const idToken = authHeader.split("Bearer ")[1];
     const decodedToken = await getAuth().verifyIdToken(idToken);
 
-    const adminDoc = await adminDb.collection("users").doc(decodedToken.uid).get();
+const adminDoc = await adminDb().collection("users").doc(decodedToken.uid).get();
     if (!adminDoc.exists || adminDoc.data()?.isAdmin !== true) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-    const userDoc = await adminDb.collection("users").doc(uid).get();
+const userDoc = await adminDb().collection("users").doc(uid).get();
 
     if (!userDoc.exists) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "User email not found" }, { status: 400 });
     }
 
-    await adminDb.collection("users").doc(uid).update({
+await adminDb().collection("users").doc(uid).update({
       status: "approved",
       approvedAt: new Date().toISOString(),
     });
