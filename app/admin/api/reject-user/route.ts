@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase-admin";
-import { getAuth } from "firebase-admin/auth";
+// Dynamic Firebase imports to avoid build-time env check
 import nodemailer from "nodemailer";
 
 export async function POST(req: Request) {
@@ -19,7 +18,9 @@ export async function POST(req: Request) {
     }
 
     const idToken = authHeader.split("Bearer ")[1];
-    const decodedToken = await getAuth().verifyIdToken(idToken);
+const { adminAuth, adminDb } = await import('@/lib/firebase-admin');
+const { getAuth } = await import('firebase-admin/auth');
+const decodedToken = await getAuth().verifyIdToken(idToken);
 
 const adminDoc = await adminDb().collection("users").doc(decodedToken.uid).get();
     if (!adminDoc.exists || adminDoc.data()?.isAdmin !== true) {
