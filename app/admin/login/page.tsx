@@ -201,7 +201,7 @@ export default function AdminLoginPage() {
             <div className="text-center mt-4">
                 <button
                   type="button"
-                  onClick={() => router.push("http://localhost:3001/auth/signin")}
+                  onClick={() => router.push("insta-aid.vercel.app")}
                   className="text-blue-700 font-semibold hover:underline"
                 >
                   Sign in as User
