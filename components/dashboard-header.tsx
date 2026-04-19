@@ -32,7 +32,7 @@ export function DashboardHeader({ onMenuClick, activeAccidents }: DashboardHeade
       const auth = getAuth()
       await signOut(auth)
       console.log("[v0] User signed out successfully")
-      window.location.href = "http://localhost:3000"
+      window.location.href = "https://instaaid-admin.vercel.app/admin/login"
     } catch (error) {
       console.error("[v0] Error signing out:", error)
       setIsSigningOut(false)
@@ -66,7 +66,8 @@ export function DashboardHeader({ onMenuClick, activeAccidents }: DashboardHeade
 
         <div className="ml-auto flex items-center gap-2">
 
-{/* profile logout */}
+{/* sign out */}
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon">
@@ -76,7 +77,7 @@ export function DashboardHeader({ onMenuClick, activeAccidents }: DashboardHeade
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Admin User</DropdownMenuLabel>
-              <DropdownMenuSeparator />
+
               <DropdownMenuItem onClick={handleSignOut} disabled={isSigningOut}>
                 {isSigningOut ? "Signing out..." : "Log out"}
               </DropdownMenuItem>
