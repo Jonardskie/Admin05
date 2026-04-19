@@ -65,19 +65,8 @@ export function DashboardHeader({ onMenuClick, activeAccidents }: DashboardHeade
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="relative">
-            <Bell className="h-5 w-5" />
-            {activeAccidents > 0 && (
-              <Badge
-                variant="destructive"
-                className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 text-xs flex items-center justify-center"
-              >
-                {activeAccidents}
-              </Badge>
-            )}
-            <span className="sr-only">Notifications</span>
-          </Button>
 
+{/* profile logout */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon">
@@ -87,9 +76,6 @@ export function DashboardHeader({ onMenuClick, activeAccidents }: DashboardHeade
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Admin User</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>Profile</DropdownMenuItem>
-              <DropdownMenuItem>Settings</DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleSignOut} disabled={isSigningOut}>
                 {isSigningOut ? "Signing out..." : "Log out"}
