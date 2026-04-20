@@ -201,7 +201,7 @@ export default function AdminLoginPage() {
           </Button>
             <div className="text-center mt-4">
                 <Link
-                  href="https://insta-aid.vercel.app/auth/signin"
+                  href="https://admin-instaaid.vercel.app/admin/login"
                   className="block w-full mt-4 text-center py-3 rounded-lg text-[#173C94] font-semibold hover:underline"
                 >
                   Sign in as User
