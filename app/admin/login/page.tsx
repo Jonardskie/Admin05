@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Loader2 } from "lucide-react"
 import { Toaster, toast } from "react-hot-toast"
+import Link from "next/link"
 
 interface UserData {
   uid: string
@@ -199,13 +200,12 @@ export default function AdminLoginPage() {
             )}
           </Button>
             <div className="text-center mt-4">
-                <button
-                  type="button"
-                  onClick={() => router.push("insta-aid.vercel.app")}
-                  className="text-blue-700 font-semibold hover:underline"
+                <Link
+                  href="https://insta-aid.vercel.app"
+                  className="block w-full mt-4 text-center py-3 rounded-lg text-[#173C94] font-semibold hover:underline"
                 >
                   Sign in as User
-                </button>
+                </Link>
               </div>
         </form>
       </div>
