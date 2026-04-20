@@ -32,7 +32,7 @@ export function DashboardHeader({ onMenuClick, activeAccidents }: DashboardHeade
       const auth = getAuth()
       await signOut(auth)
       console.log("[v0] User signed out successfully")
-      window.location.href = "https://instaaid-admin.vercel.app/admin/login"
+      window.location.href = "https://admin-instaaid.vercel.app/admin/login"
     } catch (error) {
       console.error("[v0] Error signing out:", error)
       setIsSigningOut(false)
