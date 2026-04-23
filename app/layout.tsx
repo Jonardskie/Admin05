@@ -7,8 +7,8 @@ import "./globals.css"
 
 export const metadata: Metadata = {
   title: "InstaAid",
-  description: "Created with BSCS-4A",
-  generator: "v0.app",
+  description: "Smart Detection. Swift Response. Saved Lives.",
+  icons: { icon: "/images/logo1.png" },
 }
 
 export default function RootLayout({
