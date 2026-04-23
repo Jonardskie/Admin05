@@ -12,22 +12,25 @@ import { useToast } from "@/hooks/use-toast"
 import { rtdb } from "@/lib/firebase"
 import { ref, onValue, set } from "firebase/database"
 
+type AdminAlert = {
+  viewed?: boolean
+  coordinates?: string
+}
+
 export function AccidentsView({ accidents }: { accidents: FirebaseAccident[] }) {
   const [selectedAccident, setSelectedAccident] = useState<FirebaseAccident | null>(null)
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
   const [isCleaningUp, setIsCleaningUp] = useState(false)
   const { toast } = useToast()
-  const [alerts, setAlerts] = useState<Record<string, any>>({})
+  const [alerts, setAlerts] = useState<Record<string, AdminAlert>>({})
 
-  // ✅ Safe Realtime DB listener for admin alerts (no infinite loop)
   useEffect(() => {
     const alertsRef = ref(rtdb, "admin_alerts")
     const unsubscribe = onValue(alertsRef, (snapshot) => {
-      const data = snapshot.val() || {}
+      const data = (snapshot.val() || {}) as Record<string, AdminAlert>
 
-      // ✅ Use functional state update to avoid infinite re-renders
       setAlerts((prevAlerts) => {
-        const updatedAlerts = { ...prevAlerts }
+        const updatedAlerts: Record<string, AdminAlert> = { ...prevAlerts }
 
         Object.entries(data).forEach(([id, alert]) => {
           if (!prevAlerts[id] && !alert.viewed) {
@@ -39,6 +42,7 @@ export function AccidentsView({ accidents }: { accidents: FirebaseAccident[] }) 
               variant: "destructive",
             })
           }
+
           updatedAlerts[id] = alert
         })
 
@@ -49,7 +53,6 @@ export function AccidentsView({ accidents }: { accidents: FirebaseAccident[] }) 
     return () => unsubscribe()
   }, [toast])
 
-  // ✅ Mark alert as viewed when admin opens an accident
   const handleViewAccident = async (accident: FirebaseAccident) => {
     setSelectedAccident(accident)
     try {
@@ -68,7 +71,6 @@ export function AccidentsView({ accidents }: { accidents: FirebaseAccident[] }) 
   const dispatchedAccidents = sortByLatest(accidents.filter((acc) => acc.status === "dispatched"))
   const resolvedAccidents = sortByLatest(accidents.filter((acc) => acc.status === "resolved"))
 
-  // ✅ Delete Accident
   const handleDelete = async (accident: FirebaseAccident) => {
     setDeletingIds((prev) => new Set(prev).add(accident.id))
 
@@ -94,7 +96,6 @@ export function AccidentsView({ accidents }: { accidents: FirebaseAccident[] }) 
     }
   }
 
-  // ✅ Cleanup Invalid Accidents
   const handleCleanup = async () => {
     setIsCleaningUp(true)
     try {
@@ -115,7 +116,6 @@ export function AccidentsView({ accidents }: { accidents: FirebaseAccident[] }) 
     }
   }
 
-  // ✅ Table Component
   const AccidentTable = ({ accidentsList }: { accidentsList: FirebaseAccident[] }) => (
     <div className="border rounded-lg overflow-hidden">
       <table className="w-full">
@@ -132,7 +132,7 @@ export function AccidentsView({ accidents }: { accidents: FirebaseAccident[] }) 
           {accidentsList.map((accident) => (
             <tr
               key={accident.id}
-              className="border-b hover:bg-muted/50 cursor-pointer transition-colors group"
+              className="border-b hover:bg-muted/50 cursor-pointer transition-colors"
               onClick={() => handleViewAccident(accident)}
             >
               <AccidentCard accident={accident} onClick={() => handleViewAccident(accident)} />
@@ -140,7 +140,7 @@ export function AccidentsView({ accidents }: { accidents: FirebaseAccident[] }) 
                 <Button
                   variant="destructive"
                   size="icon"
-                  className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="h-8 w-8"
                   onClick={(e) => {
                     e.stopPropagation()
                     handleDelete(accident)
@@ -157,7 +157,6 @@ export function AccidentsView({ accidents }: { accidents: FirebaseAccident[] }) 
     </div>
   )
 
-  // ✅ UI Render
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -181,6 +180,7 @@ export function AccidentsView({ accidents }: { accidents: FirebaseAccident[] }) 
               </span>
             )}
           </TabsTrigger>
+
           <TabsTrigger value="pending">
             Pending
             {pendingAccidents.length > 0 && (
@@ -189,6 +189,7 @@ export function AccidentsView({ accidents }: { accidents: FirebaseAccident[] }) 
               </span>
             )}
           </TabsTrigger>
+
           <TabsTrigger value="dispatched">
             Dispatched
             {dispatchedAccidents.length > 0 && (
@@ -197,6 +198,7 @@ export function AccidentsView({ accidents }: { accidents: FirebaseAccident[] }) 
               </span>
             )}
           </TabsTrigger>
+
           <TabsTrigger value="resolved">
             Resolved
             {resolvedAccidents.length > 0 && (
@@ -208,43 +210,19 @@ export function AccidentsView({ accidents }: { accidents: FirebaseAccident[] }) 
         </TabsList>
 
         <TabsContent value="all" className="mt-6">
-          {allAccidents.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-12 text-center">
-              <p className="text-muted-foreground">No accidents recorded yet.</p>
-            </div>
-          ) : (
-            <AccidentTable accidentsList={allAccidents} />
-          )}
+          <AccidentTable accidentsList={allAccidents} />
         </TabsContent>
 
         <TabsContent value="pending" className="mt-6">
-          {pendingAccidents.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-12 text-center">
-              <p className="text-muted-foreground">No pending accidents.</p>
-            </div>
-          ) : (
-            <AccidentTable accidentsList={pendingAccidents} />
-          )}
+          <AccidentTable accidentsList={pendingAccidents} />
         </TabsContent>
 
         <TabsContent value="dispatched" className="mt-6">
-          {dispatchedAccidents.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-12 text-center">
-              <p className="text-muted-foreground">No dispatched accidents.</p>
-            </div>
-          ) : (
-            <AccidentTable accidentsList={dispatchedAccidents} />
-          )}
+          <AccidentTable accidentsList={dispatchedAccidents} />
         </TabsContent>
 
         <TabsContent value="resolved" className="mt-6">
-          {resolvedAccidents.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-12 text-center">
-              <p className="text-muted-foreground">No resolved accidents.</p>
-            </div>
-          ) : (
-            <AccidentTable accidentsList={resolvedAccidents} />
-          )}
+          <AccidentTable accidentsList={resolvedAccidents} />
         </TabsContent>
       </Tabs>
 
