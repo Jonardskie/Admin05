@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-// Dynamic Firebase imports to avoid build-time env check
 import nodemailer from "nodemailer";
 
 export async function POST(req: Request) {
@@ -12,21 +11,28 @@ export async function POST(req: Request) {
     }
 
     const authHeader = req.headers.get("authorization");
+
     if (!authHeader?.startsWith("Bearer ")) {
       return NextResponse.json({ error: "Missing auth token" }, { status: 401 });
     }
 
     const idToken = authHeader.split("Bearer ")[1];
-const { adminAuth, adminDb, getAuth } = await import('@/lib/firebase-admin');
-const { getAuth: adminGetAuth } = await import('firebase-admin/auth');
-const decodedToken = await adminGetAuth().verifyIdToken(idToken);
 
-const adminDoc = await adminDb().collection("users").doc(decodedToken.uid).get();
+    // Use your initialized Firebase Admin exports
+    const { adminAuth, adminDb } = await import("@/lib/firebase-admin");
+
+    const decodedToken = await adminAuth().verifyIdToken(idToken);
+
+    const adminDoc = await adminDb()
+      .collection("users")
+      .doc(decodedToken.uid)
+      .get();
+
     if (!adminDoc.exists || adminDoc.data()?.isAdmin !== true) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-const userDoc = await adminDb().collection("users").doc(uid).get();
+    const userDoc = await adminDb().collection("users").doc(uid).get();
 
     if (!userDoc.exists) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -41,7 +47,7 @@ const userDoc = await adminDb().collection("users").doc(uid).get();
       return NextResponse.json({ error: "User email not found" }, { status: 400 });
     }
 
-await adminDb().collection("users").doc(uid).update({
+    await adminDb().collection("users").doc(uid).update({
       status: "approved",
       approvedAt: new Date().toISOString(),
     });

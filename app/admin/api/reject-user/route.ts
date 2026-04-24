@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-// Dynamic Firebase imports to avoid build-time env check
 import nodemailer from "nodemailer";
 
 export async function POST(req: Request) {
@@ -11,24 +10,30 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing uid" }, { status: 400 });
     }
 
-    // Verify the caller is an authenticated admin
     const authHeader = req.headers.get("authorization");
+
     if (!authHeader?.startsWith("Bearer ")) {
       return NextResponse.json({ error: "Missing auth token" }, { status: 401 });
     }
 
     const idToken = authHeader.split("Bearer ")[1];
-const { adminAuth, adminDb } = await import('@/lib/firebase-admin');
-const { getAuth } = await import('firebase-admin/auth');
-const decodedToken = await getAuth().verifyIdToken(idToken);
 
-const adminDoc = await adminDb().collection("users").doc(decodedToken.uid).get();
+    // ✅ Correct: use initialized Firebase Admin exports
+    const { adminAuth, adminDb } = await import("@/lib/firebase-admin");
+
+    // ✅ FIX: use adminAuth(), NOT getAuth()
+    const decodedToken = await adminAuth().verifyIdToken(idToken);
+
+    const adminDoc = await adminDb()
+      .collection("users")
+      .doc(decodedToken.uid)
+      .get();
+
     if (!adminDoc.exists || adminDoc.data()?.isAdmin !== true) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-    // Get the user data first before deleting
-const userDoc = await adminDb().collection("users").doc(uid).get();
+    const userDoc = await adminDb().collection("users").doc(uid).get();
 
     if (!userDoc.exists) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -36,7 +41,10 @@ const userDoc = await adminDb().collection("users").doc(uid).get();
 
     const userData = userDoc.data();
     const email = userData?.email;
-    const name = userData?.name || "User";
+    const name =
+      userData?.name ||
+      `${userData?.firstName || ""} ${userData?.lastName || ""}`.trim() ||
+      "User";
 
     if (!email) {
       return NextResponse.json(
@@ -45,7 +53,6 @@ const userDoc = await adminDb().collection("users").doc(uid).get();
       );
     }
 
-    // Send rejection email first
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
@@ -84,11 +91,8 @@ const userDoc = await adminDb().collection("users").doc(uid).get();
       `,
     });
 
-    // Delete from Firebase Authentication
-await adminAuth().deleteUser(uid);
-
-    // Delete from Firestore
-await adminDb().collection("users").doc(uid).delete();
+    await adminAuth().deleteUser(uid);
+    await adminDb().collection("users").doc(uid).delete();
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

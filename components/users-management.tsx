@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { getAuth, onAuthStateChanged, signInAnonymously, getIdTokenResult } from "firebase/auth"
+import { onAuthStateChanged, signInAnonymously, getIdTokenResult } from "firebase/auth"
+import { auth } from "@/lib/firebase-config"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -102,7 +103,6 @@ export function UsersManagement() {
   }
 
   useEffect(() => {
-    const auth = getAuth()
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setAuthUser(user)
@@ -222,7 +222,6 @@ export function UsersManagement() {
     setError(null)
     try {
       setLoading(true)
-      const auth = getAuth()
       await signInAnonymously(auth)
     } catch (signInError) {
       console.error("[v0] Anonymous sign-in failed:", signInError)
@@ -269,7 +268,7 @@ export function UsersManagement() {
         setError(null)
 
         try {
-          const currentUser = getAuth().currentUser
+          const currentUser = auth.currentUser
           if (!currentUser) {
             throw new Error("No authenticated admin user found.")
           }
@@ -312,7 +311,7 @@ export function UsersManagement() {
         setError(null)
 
         try {
-          const currentUser = getAuth().currentUser
+          const currentUser = auth.currentUser
           if (!currentUser) {
             throw new Error("No authenticated admin user found.")
           }
@@ -354,7 +353,7 @@ export function UsersManagement() {
   setError(null)
 
   try {
-    const currentUser = getAuth().currentUser
+    const currentUser = auth.currentUser
     if (!currentUser) {
       throw new Error("No authenticated admin user found.")
     }

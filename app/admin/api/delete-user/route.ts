@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-// Dynamic Firebase imports to avoid build-time env check
 
 export async function POST(req: Request) {
   try {
@@ -11,22 +10,31 @@ export async function POST(req: Request) {
     }
 
     const authHeader = req.headers.get("authorization");
+
     if (!authHeader?.startsWith("Bearer ")) {
       return NextResponse.json({ error: "Missing auth token" }, { status: 401 });
     }
 
     const idToken = authHeader.split("Bearer ")[1];
-const { adminAuth, adminDb } = await import('@/lib/firebase-admin');
-const { getAuth } = await import('firebase-admin/auth');
-const decodedToken = await getAuth().verifyIdToken(idToken);
 
-const adminDoc = await adminDb().collection("users").doc(decodedToken.uid).get();
+    // ✅ Correct: use initialized Firebase Admin
+    const { adminAuth, adminDb } = await import("@/lib/firebase-admin");
+
+    // ✅ FIX: use adminAuth(), NOT getAuth()
+    const decodedToken = await adminAuth().verifyIdToken(idToken);
+
+    const adminDoc = await adminDb()
+      .collection("users")
+      .doc(decodedToken.uid)
+      .get();
+
     if (!adminDoc.exists || adminDoc.data()?.isAdmin !== true) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-await adminAuth().deleteUser(uid);
-await adminDb().collection("users").doc(uid).delete();
+    // ✅ Delete user from Auth and Firestore
+    await adminAuth().deleteUser(uid);
+    await adminDb().collection("users").doc(uid).delete();
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
