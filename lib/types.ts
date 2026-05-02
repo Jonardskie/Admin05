@@ -44,20 +44,28 @@ export interface FirebaseAccident {
   userId: string
   firebaseUserId?: string
 
+  name?: string
+  phone?: string
+  email?: string
+
+  user?: User
+  location?: Location
+
+  latitude?: number
+  longitude?: number
+
   timestamp: Date
   coordinates: string
   status: AccidentStatus
   adminStatus?: string
   severity?: AccidentSeverity
 
-  // ✅ Verification / Confirmation Flags
   confirmed?: boolean
   manualConfirmed?: boolean
   autoConfirmed?: boolean
   verified?: boolean
   falseAlarm?: boolean
 
-  // ✅ Sensor & Device Data
   accelerometerData?: {
     x: number
     y: number
@@ -66,15 +74,12 @@ export interface FirebaseAccident {
   battery?: number
   lastSeen?: number
 
-  // ✅ Police / Report Details
   policeReport?: string
   policeReportDate?: number
   policeReportPersonnel?: string
 
-  // ✅ Miscellaneous Info
   locationName?: string
 
-  // ✅ Flexible field expansion (for backward compatibility)
   [key: string]: any
 }
 

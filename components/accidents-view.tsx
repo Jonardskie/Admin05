@@ -18,7 +18,8 @@ type AdminAlert = {
 }
 
 export function AccidentsView({ accidents }: { accidents: FirebaseAccident[] }) {
-  const [selectedAccident, setSelectedAccident] = useState<FirebaseAccident | null>(null)
+  const [selectedAccident, setSelectedAccident] =
+    useState<FirebaseAccident | null>(null)
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
   const [isCleaningUp, setIsCleaningUp] = useState(false)
   const { toast } = useToast()
@@ -26,6 +27,7 @@ export function AccidentsView({ accidents }: { accidents: FirebaseAccident[] }) 
 
   useEffect(() => {
     const alertsRef = ref(rtdb, "admin_alerts")
+
     const unsubscribe = onValue(alertsRef, (snapshot) => {
       const data = (snapshot.val() || {}) as Record<string, AdminAlert>
 
@@ -55,6 +57,7 @@ export function AccidentsView({ accidents }: { accidents: FirebaseAccident[] }) 
 
   const handleViewAccident = async (accident: FirebaseAccident) => {
     setSelectedAccident(accident)
+
     try {
       await set(ref(rtdb, `admin_alerts/${accident.id}/viewed`), true)
     } catch (err) {
@@ -63,13 +66,21 @@ export function AccidentsView({ accidents }: { accidents: FirebaseAccident[] }) 
   }
 
   const sortByLatest = (accidentsList: FirebaseAccident[]) => {
-    return [...accidentsList].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+    return [...accidentsList].sort(
+      (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
+    )
   }
 
   const allAccidents = sortByLatest(accidents)
-  const pendingAccidents = sortByLatest(accidents.filter((acc) => acc.status === "pending"))
-  const dispatchedAccidents = sortByLatest(accidents.filter((acc) => acc.status === "dispatched"))
-  const resolvedAccidents = sortByLatest(accidents.filter((acc) => acc.status === "resolved"))
+  const pendingAccidents = sortByLatest(
+    accidents.filter((acc) => acc.status === "pending"),
+  )
+  const dispatchedAccidents = sortByLatest(
+    accidents.filter((acc) => acc.status === "dispatched"),
+  )
+  const resolvedAccidents = sortByLatest(
+    accidents.filter((acc) => acc.status === "resolved"),
+  )
 
   const handleDelete = async (accident: FirebaseAccident) => {
     setDeletingIds((prev) => new Set(prev).add(accident.id))
@@ -98,14 +109,17 @@ export function AccidentsView({ accidents }: { accidents: FirebaseAccident[] }) 
 
   const handleCleanup = async () => {
     setIsCleaningUp(true)
+
     try {
       const result = await cleanupInvalidAccidents()
+
       toast({
         title: "🧹 Cleanup complete",
         description: `Deleted ${result.deleted} invalid accidents, kept ${result.kept} valid ones.`,
       })
     } catch (error) {
       console.error("[v0] Error during cleanup:", error)
+
       toast({
         title: "Error",
         description: "Failed to cleanup invalid accidents.",
@@ -116,26 +130,42 @@ export function AccidentsView({ accidents }: { accidents: FirebaseAccident[] }) 
     }
   }
 
-  const AccidentTable = ({ accidentsList }: { accidentsList: FirebaseAccident[] }) => (
-    <div className="border rounded-lg overflow-hidden">
+  const AccidentTable = ({
+    accidentsList,
+  }: {
+    accidentsList: FirebaseAccident[]
+  }) => (
+    <div className="overflow-hidden rounded-lg border">
       <table className="w-full">
         <thead>
           <tr className="border-b bg-muted/50">
-            <th className="px-4 py-3 text-left text-sm font-semibold">Incident</th>
-            <th className="px-4 py-3 text-left text-sm font-semibold">Reporter</th>
-            <th className="px-4 py-3 text-left text-sm font-semibold">Location</th>
-            <th className="px-4 py-3 text-left text-sm font-semibold">Status</th>
-            <th className="px-4 py-3 text-right text-sm font-semibold">Action</th>
+            <th className="px-4 py-3 text-left text-sm font-semibold">
+              Incident
+            </th>
+            <th className="px-4 py-3 text-left text-sm font-semibold">
+              Location
+            </th>
+            <th className="px-4 py-3 text-left text-sm font-semibold">
+              Status
+            </th>
+            <th className="px-4 py-3 text-right text-sm font-semibold">
+              Action
+            </th>
           </tr>
         </thead>
+
         <tbody>
           {accidentsList.map((accident) => (
             <tr
               key={accident.id}
-              className="border-b hover:bg-muted/50 cursor-pointer transition-colors"
+              className="cursor-pointer border-b transition-colors hover:bg-muted/50"
               onClick={() => handleViewAccident(accident)}
             >
-              <AccidentCard accident={accident} onClick={() => handleViewAccident(accident)} />
+              <AccidentCard
+                accident={accident}
+                onClick={() => handleViewAccident(accident)}
+              />
+
               <td className="px-4 py-3 text-right">
                 <Button
                   variant="destructive"
@@ -161,9 +191,14 @@ export function AccidentsView({ accidents }: { accidents: FirebaseAccident[] }) 
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Accident Notifications</h2>
-          <p className="text-muted-foreground">Monitor and respond to detected accidents in real time.</p>
+          <h2 className="text-3xl font-bold tracking-tight">
+            Accident Notifications
+          </h2>
+          <p className="text-muted-foreground">
+            Monitor and respond to detected accidents in real time.
+          </p>
         </div>
+
         <Button variant="outline" onClick={handleCleanup} disabled={isCleaningUp}>
           <Eraser className="mr-2 h-4 w-4" />
           {isCleaningUp ? "Cleaning..." : "Cleanup Invalid"}
@@ -227,7 +262,10 @@ export function AccidentsView({ accidents }: { accidents: FirebaseAccident[] }) 
       </Tabs>
 
       {selectedAccident && (
-        <AccidentDetails accident={selectedAccident} onClose={() => setSelectedAccident(null)} />
+        <AccidentDetails
+          accident={selectedAccident}
+          onClose={() => setSelectedAccident(null)}
+        />
       )}
     </div>
   )
